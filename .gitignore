@@ -2,6 +2,8 @@
 .terraform/
 *.tfstate
 *.tfstate.*
+*.tfplan
+tfplan
 crash.log
 override.tf
 override.tf.json
@@ -12,7 +14,8 @@ override.tf.json
 .terraform.lock.hcl
 
 # Sensitive files
-terraform.tfvars
+terraform.tfvars*
+!terraform.tfvars.example
 *.auto.tfvars
 .env
 .env.*

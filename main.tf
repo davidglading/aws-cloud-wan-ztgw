@@ -1,3 +1,39 @@
+# Provider aliases use1/use2 are retained to preserve default resource addresses.
+data "aws_availability_zones" "primary" {
+  provider = aws.use1
+  state    = "available"
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
+  lifecycle {
+    postcondition {
+      condition     = length(self.names) >= 2
+      error_message = "The primary region must have at least two available standard Availability Zones."
+    }
+  }
+}
+
+data "aws_availability_zones" "secondary" {
+  count    = var.multiregion_deployment ? 1 : 0
+  provider = aws.use2
+  state    = "available"
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
+  lifecycle {
+    precondition {
+      condition     = var.aws_region != var.secondary_aws_region
+      error_message = "secondary_aws_region must differ from aws_region when multiregion_deployment is true."
+    }
+    postcondition {
+      condition     = length(self.names) >= 2
+      error_message = "The secondary region must have at least two available standard Availability Zones."
+    }
+  }
+}
+
 resource "aws_vpc" "use1" {
   for_each = local.vpc_specs_use1
 
@@ -45,7 +81,7 @@ resource "aws_subnet" "use1" {
   tags = {
     Name      = each.value.name
     Purpose   = each.value.purpose
-    Region    = "us-east-1"
+    Region    = var.aws_region
     VPC       = aws_vpc.use1[each.value.vpc_key].tags["Name"]
     Terraform = "true"
   }
@@ -64,7 +100,7 @@ resource "aws_subnet" "use2" {
   tags = {
     Name      = each.value.name
     Purpose   = each.value.purpose
-    Region    = "us-east-2"
+    Region    = var.secondary_aws_region
     VPC       = aws_vpc.use2[each.value.vpc_key].tags["Name"]
     Terraform = "true"
   }
@@ -92,7 +128,7 @@ resource "aws_security_group" "use1" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["10.4.0.0/16"]
+    cidr_blocks = [local.vpc_specs[each.value.vpc_key].cidr]
   }
 
   ingress {
@@ -139,7 +175,7 @@ resource "aws_security_group" "use2" {
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["10.4.0.0/16"]
+    cidr_blocks = [local.vpc_specs[each.value.vpc_key].cidr]
   }
 
   ingress {
@@ -204,7 +240,7 @@ resource "aws_vpc_endpoint" "use2" {
   }
 }
 
-data "aws_ami" "amazon_linux_2_use1" {
+data "aws_ami" "amazon_linux_2023_use1" {
   provider = aws.use1
 
   most_recent = true
@@ -212,7 +248,7 @@ data "aws_ami" "amazon_linux_2_use1" {
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 
   filter {
@@ -221,7 +257,8 @@ data "aws_ami" "amazon_linux_2_use1" {
   }
 }
 
-data "aws_ami" "amazon_linux_2_use2" {
+data "aws_ami" "amazon_linux_2023_use2" {
+  count    = var.multiregion_deployment ? 1 : 0
   provider = aws.use2
 
   most_recent = true
@@ -229,7 +266,7 @@ data "aws_ami" "amazon_linux_2_use2" {
 
   filter {
     name   = "name"
-    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 
   filter {
@@ -243,7 +280,7 @@ resource "aws_instance" "use1" {
 
   provider = aws.use1
 
-  ami                    = data.aws_ami.amazon_linux_2_use1.id
+  ami                    = data.aws_ami.amazon_linux_2023_use1.id
   instance_type          = each.value.instance_type
   subnet_id              = aws_subnet.use1[each.value.subnet_key].id
   vpc_security_group_ids = [aws_security_group.use1["${each.value.vpc_key}-workload"].id]
@@ -255,6 +292,7 @@ resource "aws_instance" "use1" {
     systemctl start httpd
   EOF
 
+  iam_instance_profile        = aws_iam_instance_profile.workload_ssm.name
   associate_public_ip_address = false
 
   tags = {
@@ -271,7 +309,7 @@ resource "aws_instance" "use2" {
 
   provider = aws.use2
 
-  ami                    = data.aws_ami.amazon_linux_2_use2.id
+  ami                    = data.aws_ami.amazon_linux_2023_use2[0].id
   instance_type          = each.value.instance_type
   subnet_id              = aws_subnet.use2[each.value.subnet_key].id
   vpc_security_group_ids = [aws_security_group.use2["${each.value.vpc_key}-workload"].id]
@@ -283,6 +321,7 @@ resource "aws_instance" "use2" {
     systemctl start httpd
   EOF
 
+  iam_instance_profile        = aws_iam_instance_profile.workload_ssm.name
   associate_public_ip_address = false
 
   tags = {

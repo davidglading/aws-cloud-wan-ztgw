@@ -1,0 +1,127 @@
+{
+  "version": "2021.12",
+  "core-network-configuration": {
+    "vpn-ecmp-support": false,
+    "asn-ranges": [
+      "64512-65534"
+    ],
+    "edge-locations": [
+      {
+        "location": "us-east-1"
+      },
+      {
+        "location": "us-east-2"
+      }
+    ]
+  },
+  "segments": [
+    {
+      "name": "Prod",
+      "require-attachment-acceptance": false,
+      "isolate-attachments": true
+    },
+    {
+      "name": "NonProd",
+      "require-attachment-acceptance": false,
+      "isolate-attachments": true
+    }
+  ],
+  "network-function-groups": [
+    {
+      "name": "SecurityNFG",
+      "require-attachment-acceptance": false
+    }
+  ],
+  "segment-actions": [
+    {
+      "action": "send-via",
+      "segment": "Prod",
+      "mode": "single-hop",
+      "when-sent-to": {
+        "segments": "*"
+      },
+      "via": {
+        "network-function-groups": [
+          "SecurityNFG"
+        ]
+      }
+    },
+    {
+      "action": "send-via",
+      "segment": "NonProd",
+      "mode": "single-hop",
+      "when-sent-to": {
+        "segments": "*"
+      },
+      "via": {
+        "network-function-groups": [
+          "SecurityNFG"
+        ]
+      }
+    },
+    {
+      "action": "send-to",
+      "segment": "Prod",
+      "via": {
+        "network-function-groups": [
+          "SecurityNFG"
+        ]
+      }
+    },
+    {
+      "action": "send-to",
+      "segment": "NonProd",
+      "via": {
+        "network-function-groups": [
+          "SecurityNFG"
+        ]
+      }
+    }
+  ],
+  "attachment-policies": [
+    {
+      "rule-number": 100,
+      "conditions": [
+        {
+          "type": "tag-value",
+          "operator": "equals",
+          "key": "segment",
+          "value": "Prod"
+        }
+      ],
+      "action": {
+        "association-method": "constant",
+        "segment": "Prod"
+      }
+    },
+    {
+      "rule-number": 200,
+      "conditions": [
+        {
+          "type": "tag-value",
+          "operator": "equals",
+          "key": "segment",
+          "value": "NonProd"
+        }
+      ],
+      "action": {
+        "association-method": "constant",
+        "segment": "NonProd"
+      }
+    },
+    {
+      "rule-number": 300,
+      "conditions": [
+        {
+          "type": "tag-value",
+          "operator": "equals",
+          "key": "segment",
+          "value": "Security"
+        }
+      ],
+      "action": {
+        "add-to-network-function-group": "SecurityNFG"
+      }
+    }
+  ]
+}

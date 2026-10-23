@@ -1,19 +1,33 @@
 # Example values for AWS Cloud WAN ZTGW deployment
 # Copy this file to terraform.tfvars and update the values for your environment.
 
-# Set to true for the guide's two-region topology (us-east-1 and us-east-2)
+# Set to true to deploy in aws_region and secondary_aws_region.
 # Set to false for a single-region deployment.
 multiregion_deployment = false
 
-aws_region = "us-east-1"
+aws_region = "us-west-1"
+# Used only for multi-region deployments; must differ from aws_region.
+secondary_aws_region = "us-west-1"
 
 # Naming prefix used in VPC and resource names (example from the deployment guide)
-naming_prefix = "dglading-cloud-wan-"
+naming_prefix = "dglading-cloud-wan-2"
 
 # AWS interface endpoint service name prefix for the SSM private endpoints
 # Example values: "com.amazonaws" or a custom/private endpoint namespace if applicable
 vpc_endpoint_service_name = "com.amazonaws"
 
-# Region suffix used when naming VPCs; typically 1 for us-east-1 and 2 for us-east-2
-# If left blank, the Terraform locals will derive it automatically from aws_region.
-region_suffix = "1"
+# Optional suffix overrides. Blank uses the region name, or 1/2 for us-east-1/2.
+region_suffix            = ""
+secondary_region_suffix = ""
+
+# Add ec2messages only in regions that support the legacy endpoint.
+ssm_endpoint_services   = ["ssm", "ssmmessages"]
+
+# Zscaler must authorize this AWS account for each regional GWLB service.
+# Each key must match a deployed region. Regions omitted from this map have
+# inspection endpoints/routes pending. Never use the dummy service IDs below.
+ztgw_endpoint_service_names = {}
+# ztgw_endpoint_service_names = {
+#   "us-east-1" = "com.amazonaws.vpce.us-east-1.vpce-svc-0123456789abcdef0"
+#   "us-east-2" = "com.amazonaws.vpce.us-east-2.vpce-svc-0fedcba9876543210"
+# }
