@@ -1,6 +1,10 @@
 # Example values for AWS Cloud WAN ZTGW deployment
 # Copy this file to terraform.tfvars and update the values for your environment.
 
+# Set to true for the guide's two-region topology (us-east-1 and us-east-2)
+# Set to false for a single-region deployment.
+multiregion_deployment = false
+
 aws_region = "us-east-1"
 
 # Naming prefix used in VPC and resource names (example from the deployment guide)

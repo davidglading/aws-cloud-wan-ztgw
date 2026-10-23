@@ -1,7 +1,13 @@
 variable "aws_region" {
-  description = "AWS region where the spoke and security VPCs are deployed. Example: us-east-1"
+  description = "Primary AWS region for the deployment. Example: us-east-1"
   type        = string
   default     = "us-east-1"
+}
+
+variable "multiregion_deployment" {
+  description = "When true, deploys the guide's two-region pattern (us-east-1 and us-east-2) instead of a single region."
+  type        = bool
+  default     = false
 }
 
 variable "naming_prefix" {
@@ -17,7 +23,7 @@ variable "vpc_endpoint_service_name" {
 }
 
 variable "region_suffix" {
-  description = "Region suffix for the VPC names (1 for us-east-1, 2 for us-east-2). This is auto-derived when possible."
+  description = "Optional region suffix override for VPC naming. When left empty, it is automatically derived from the regional mapping."
   type        = string
-  default     = "1"
+  default     = ""
 }
