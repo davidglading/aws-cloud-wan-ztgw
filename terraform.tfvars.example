@@ -10,7 +10,7 @@ aws_region = "us-west-1"
 secondary_aws_region = "us-west-1"
 
 # Naming prefix used in VPC and resource names (example from the deployment guide)
-naming_prefix = "dglading-cloud-wan-2"
+naming_prefix = "dglading-cloud-wan"
 
 # AWS interface endpoint service name prefix for the SSM private endpoints
 # Example values: "com.amazonaws" or a custom/private endpoint namespace if applicable
@@ -28,6 +28,6 @@ ssm_endpoint_services   = ["ssm", "ssmmessages"]
 # inspection endpoints/routes pending. Never use the dummy service IDs below.
 ztgw_endpoint_service_names = {}
 # ztgw_endpoint_service_names = {
-#   "us-east-1" = "com.amazonaws.vpce.us-east-1.vpce-svc-0123456789abcdef0"
-#   "us-east-2" = "com.amazonaws.vpce.us-east-2.vpce-svc-0fedcba9876543210"
+#   "us-east-1" = "com.amazonaws.vpce.us-east-1.vpce-svc-nnnnnnnnnnnnnnnnn"
+#   "us-east-2" = "com.amazonaws.vpce.us-east-2.vpce-svc-nnnnnnnnnnnnnnnnn"
 # }
