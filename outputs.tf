@@ -29,3 +29,11 @@ output "vpc_endpoints" {
     { for key, endpoint in aws_vpc_endpoint.use2 : key => { id = endpoint.id, service_name = endpoint.service_name, dns_entries = endpoint.dns_entry } }
   )
 }
+
+output "ec2_instances" {
+  description = "EC2 workload instances created in the prod and dev workload subnets."
+  value = merge(
+    { for key, instance in aws_instance.use1 : key => { id = instance.id, name = instance.tags["Name"], subnet = instance.subnet_id, az = instance.availability_zone } },
+    { for key, instance in aws_instance.use2 : key => { id = instance.id, name = instance.tags["Name"], subnet = instance.subnet_id, az = instance.availability_zone } }
+  )
+}

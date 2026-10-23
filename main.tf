@@ -203,3 +203,93 @@ resource "aws_vpc_endpoint" "use2" {
     Terraform = "true"
   }
 }
+
+data "aws_ami" "amazon_linux_2_use1" {
+  provider = aws.use1
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+data "aws_ami" "amazon_linux_2_use2" {
+  provider = aws.use2
+
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-gp2"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_instance" "use1" {
+  for_each = local.ec2_map_use1
+
+  provider = aws.use1
+
+  ami                    = data.aws_ami.amazon_linux_2_use1.id
+  instance_type          = each.value.instance_type
+  subnet_id              = aws_subnet.use1[each.value.subnet_key].id
+  vpc_security_group_ids = [aws_security_group.use1["${each.value.vpc_key}-workload"].id]
+  user_data              = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl enable httpd
+    systemctl start httpd
+  EOF
+
+  associate_public_ip_address = false
+
+  tags = {
+    Name      = each.value.name
+    Role      = each.value.role
+    Region    = each.value.region
+    VPC       = aws_vpc.use1[each.value.vpc_key].tags["Name"]
+    Terraform = "true"
+  }
+}
+
+resource "aws_instance" "use2" {
+  for_each = local.ec2_map_use2
+
+  provider = aws.use2
+
+  ami                    = data.aws_ami.amazon_linux_2_use2.id
+  instance_type          = each.value.instance_type
+  subnet_id              = aws_subnet.use2[each.value.subnet_key].id
+  vpc_security_group_ids = [aws_security_group.use2["${each.value.vpc_key}-workload"].id]
+  user_data              = <<-EOF
+    #!/bin/bash
+    yum update -y
+    yum install -y httpd
+    systemctl enable httpd
+    systemctl start httpd
+  EOF
+
+  associate_public_ip_address = false
+
+  tags = {
+    Name      = each.value.name
+    Role      = each.value.role
+    Region    = each.value.region
+    VPC       = aws_vpc.use2[each.value.vpc_key].tags["Name"]
+    Terraform = "true"
+  }
+}

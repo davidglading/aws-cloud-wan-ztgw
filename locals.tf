@@ -162,4 +162,24 @@ locals {
   vpc_endpoint_map      = { for item in local.vpc_endpoint_specs : item.key => item }
   vpc_endpoint_map_use1 = { for key, item in local.vpc_endpoint_map : key => item if item.region == "us-east-1" }
   vpc_endpoint_map_use2 = { for key, item in local.vpc_endpoint_map : key => item if item.region == "us-east-2" }
+
+  ec2_specs = flatten([
+    for vpc_key, vpc in local.vpc_specs : [
+      for az in ["aza", "azb"] : {
+        key           = "${vpc_key}-${az}-ec2"
+        vpc_key       = vpc_key
+        region        = vpc.region
+        role          = vpc.role
+        short_name    = vpc.short_name
+        subnet_key    = "${vpc.region}-${vpc.role}-workload-${az}"
+        name          = "${var.naming_prefix}${vpc.short_name}-${az}-ec2"
+        instance_type = "t3.micro"
+      }
+    ]
+    if vpc.role != "security"
+  ])
+
+  ec2_map      = { for item in local.ec2_specs : item.key => item }
+  ec2_map_use1 = { for key, item in local.ec2_map : key => item if item.region == "us-east-1" }
+  ec2_map_use2 = { for key, item in local.ec2_map : key => item if item.region == "us-east-2" }
 }
