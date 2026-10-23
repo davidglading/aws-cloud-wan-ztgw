@@ -1,0 +1,15 @@
+# Example values for AWS Cloud WAN ZTGW deployment
+# Copy this file to terraform.tfvars and update the values for your environment.
+
+aws_region = "us-east-1"
+
+# Naming prefix used in VPC and resource names (example from the deployment guide)
+naming_prefix = "dglading-cloud-wan-"
+
+# AWS interface endpoint service name prefix for the SSM private endpoints
+# Example values: "com.amazonaws" or a custom/private endpoint namespace if applicable
+vpc_endpoint_service_name = "com.amazonaws"
+
+# Region suffix used when naming VPCs; typically 1 for us-east-1 and 2 for us-east-2
+# If left blank, the Terraform locals will derive it automatically from aws_region.
+region_suffix = "1"
