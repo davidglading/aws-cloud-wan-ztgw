@@ -184,6 +184,28 @@ If you are using AWS Organizations or a restricted role, confirm that your deplo
 - The Cloud WAN Global Network and Core Network resources themselves are typically created in the AWS console and may require additional AWS Network Manager setup beyond the resource types in this file set.
 - This project focuses on the reusable AWS VPC, subnet, security group, EC2 workload, and interface endpoint foundation for the architecture.
 - The EC2 workload layer is intentionally simple and can be extended with application-specific user data or autoscaling policies when needed.
+- The design assumes a ZTGW inspection path for both internet egress and east-west traffic enforcement, forwarding traffic to Zscaler Internet Access for policy inspection and secure routing.
+
+## Architecture intent
+
+This Terraform models the AWS Cloud WAN foundation for a design where the ZTGW is used to:
+
+- protect east-west inter-VPC and inter-region traffic flows between application workloads
+- steer internet-bound traffic from the Cloud WAN-connected VPCs into the security inspection path
+- forward inspected traffic to Zscaler Internet Access (ZIA) for URL, threat, and policy enforcement
+- keep management connectivity private by using AWS VPC interface endpoints instead of public ingress
+
+The Security VPC acts as the inspection and forwarding layer for the Cloud WAN traffic flows, while the Prod and Dev VPCs host the application and management workloads that rely on the inspection path for both egress and service-to-service traffic control.
+
+## ZTGW traffic handling
+
+The AWS Cloud WAN and security VPC design in this repository is intended to place ZTGW in the control path for network traffic inspection.
+
+- East-west traffic: application workloads in the Prod and Dev VPCs are steered through Cloud WAN toward the Security VPC so the ZTGW can inspect and enforce policy before allowing traffic to continue.
+- Internet egress: default routes from the workload VPCs send outbound traffic to the Security VPC, where the ZTGW forwards the flow to Zscaler Internet Access for filtering and policy enforcement.
+- Private management: AWS Systems Manager access is provided through private VPC interface endpoints rather than public internet connectivity.
+
+This pattern enables both security and segmentation by ensuring the ZTGW is the enforcement point for cross-VPC and outbound web access, while the Cloud WAN backbone provides the transport path across regions.
 
 ## Deployment diagram
 
