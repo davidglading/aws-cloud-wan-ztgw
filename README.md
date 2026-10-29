@@ -66,6 +66,7 @@ It also provisions the guide's Cloud WAN components (PDF steps 2–6):
 - Dedicated spoke workload route tables with default routes to the core network
 - Per-AZ Security attachment route tables and a private inspection return route to Cloud WAN
 - One GWLB endpoint per Security inspection subnet, and its same-AZ attachment default route, when a regional Zscaler service name is supplied
+- Optional per-workload-VPC Route 53 outbound DNS forwarding for ZPA applications
 - The EC2 instance role/profile with `AmazonSSMManagedInstanceCore`; names use a generated suffix so deployments do not collide with existing IAM roles/profiles.
 
 Spoke attachment subnets remain on the VPC's local-only main route table. The
@@ -149,6 +150,142 @@ SSM role/profile, attach its managed policy, and pass the role to EC2. Cloud WAN
 may need permission to create its service-linked role on first use. Core network
 edge/service availability must be verified for the selected AWS regions.
 
+## Optional ZPA DNS forwarding
+
+Set `zpa_dns` in your local `terraform.tfvars` to add the Route 53 Resolver
+resources modeled on [Zscaler's ZPA Route 53 CloudFormation template](https://github.com/zscaler/cloud-native-aws-cloud-connector-deploy/blob/main/cloudformation-templates/zs_cc_cf_template_zpa_r53.yaml).
+The default `zpa_dns = {}` disables this option. To enable it, replace that empty
+assignment with a populated map like the example below. **Keep only one active
+`zpa_dns` assignment in the file.** Edit `terraform.tfvars`; Terraform does not
+automatically load `terraform.tfvars.example`.
+
+The Terraform implementation does not require the CloudFormation macro or Lambda.
+
+```hcl
+zpa_dns = {
+  "us-west-1-prod" = {
+    application_domain_names  = ["apps.example.internal", "private.example.com"]
+    target_ips                = ["185.46.212.88", "185.46.212.89"]
+    target_port               = 53
+    zscaler_cloud_name        = "zscaler.net"
+    zpa_cloud_name            = "ZPA"
+    additional_system_domains = []
+  }
+}
+```
+
+Each map key selects an existing managed workload VPC, `<region>-prod` or
+`<region>-dev`, in an active deployment region. Add another entry to enable a
+second VPC or region. Names are normalized to lowercase without a trailing dot;
+use DNS suffixes such as `example.internal`, rather than `*.example.internal`.
+Each suffix covers that domain and its subdomains. For example,
+`web.example.internal` covers that hostname and names below it; use
+`example.internal` to include every hostname under that domain.
+
+### Which workloads use these rules?
+
+The resolver endpoint has an ENI in each of the selected VPC's two workload
+subnets. The forwarding rules are associated with the **entire selected VPC**,
+so workloads in any of its subnets can use them when they query the VPC's
+Amazon-provided DNS resolver. Workloads using a separate DNS server need that
+server configured to use the appropriate forwarding path.
+
+An entry for `us-west-1-prod` does not enable forwarding in `us-west-1-dev` or
+another region. To enable both Prod and Dev, use one map with both keys:
+
+```hcl
+zpa_dns = {
+  "us-west-1-prod" = {
+    application_domain_names = ["example.internal"]
+    target_ips               = ["185.46.212.88", "185.46.212.89"]
+    zscaler_cloud_name       = "zscaler.net"
+    zpa_cloud_name           = "ZPA"
+  }
+  "us-west-1-dev" = {
+    application_domain_names = ["example.internal"]
+    target_ips               = ["185.46.212.88", "185.46.212.89"]
+    zscaler_cloud_name       = "zscaler.net"
+    zpa_cloud_name           = "ZPA"
+  }
+}
+```
+
+Use keys for your actual deployment regions. Each VPC can have its own domain
+list and DNS targets. Omitted optional fields use the defaults below.
+
+### Variable settings
+
+| Setting | Purpose / default |
+| --- | --- |
+| Map key | Required: an active managed `<region>-prod` or `<region>-dev` VPC |
+| `application_domain_names` | Required: one or more application DNS suffixes |
+| `target_ips` | 1–6 IPv4 DNS servers; defaults to `185.46.212.88` and `185.46.212.89` |
+| `target_port` | DNS destination port; defaults to `53` |
+| `zscaler_cloud_name` | Your Zscaler cloud domain; defaults to `zscaler.net` |
+| `zpa_cloud_name` | `ZPA` (default) or `ZPA-Beta` |
+| `additional_system_domains` | Extra domains to resolve through AWS instead of forwarding; defaults to `[]` |
+
+The CloudFormation inputs map to this configuration as follows:
+
+| CloudFormation parameter | Terraform configuration |
+| --- | --- |
+| `VPCID` | Selected by the `zpa_dns` map key; the managed VPC ID is derived |
+| `ResolverEPSubnets` | Both existing workload subnets in that VPC, one in each AZ |
+| `TargetIPs` | `target_ips`: 1–6 IPv4 DNS server addresses |
+| `ApplicationDomainNames` | `application_domain_names`: application DNS suffixes |
+| `ZscalerCloudName` | `zscaler_cloud_name`: your cloud's DNS domain |
+| `ZPACloudName` | `zpa_cloud_name`: `ZPA` or `ZPA-Beta` |
+
+Each configured VPC gets an outbound IPv4 endpoint with two ENIs, a forwarding
+rule per application suffix, and rule associations for that VPC. Resolver endpoints
+incur AWS charges. Security groups permit outbound TCP/UDP only to the configured
+DNS targets and port, consistent with [AWS's outbound Resolver requirements](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/resolver-overview-forward-vpc-to-network.html).
+
+As in the template, `SYSTEM` rules retain AWS resolution for `zscaler.com`,
+`freebsd.org`, `ntp.org`, `amazonaws.com`, your selected Zscaler cloud domain,
+and `prod.zpath.net` (`ZPA`) or `zpabeta.net` (`ZPA-Beta`). Use
+`additional_system_domains` for further exceptions. Set `zscaler_cloud_name = ""`
+to omit that one exception. An application suffix cannot exactly equal a SYSTEM
+exception in the same VPC.
+
+To forward all queries except the SYSTEM exceptions, use
+`application_domain_names = ["."]` and supply your own DNS servers as targets,
+as advised by the reference template. Ordinary application-only forwarding uses
+the template's default Zscaler targets unless you override `target_ips`.
+
+**Prerequisite:** DNS target traffic must traverse healthy ZTGW/Cloud Connector
+services. The endpoint ENIs use the selected workload subnets' existing default
+routes through Cloud WAN and `SecurityNFG`; the regional GWLB endpoints, Zscaler
+DNS handling/forwarding policies, and ZPA application access must be configured.
+Creating these DNS resources alone does not configure ZPA applications, establish
+ZPA connectivity, or bypass a missing inspection path. Security/attachment subnets
+are not used for outbound Resolver ENIs.
+
+The deployment role needs `route53resolver` permissions to create, read, update,
+delete, tag, and associate resolver endpoints and rules, plus the EC2 permissions
+needed for their ENIs and security groups. Keep actual private application domains
+in ignored `terraform.tfvars`, and review existing rule associations for the same
+domains before applying.
+
+### Apply and verify
+
+After saving your `terraform.tfvars`, create and review a fresh plan:
+
+```bash
+terraform validate
+terraform plan -out=tfplan
+terraform apply tfplan
+terraform output zpa_dns_resolvers
+```
+
+From a workload in a configured VPC, test an actual application hostname, for
+example `nslookup web.example.internal`. A live DNS and ZPA connectivity check
+requires the configured AWS/Zscaler environment.
+
+To disable this option, set `zpa_dns = {}` and review/apply a new plan. Terraform
+will remove the resolver endpoints, rules, associations, and their security
+groups. Removing one map entry disables it only for that VPC.
+
 ## Validation
 
 ```bash
@@ -208,6 +345,8 @@ is ready, rerun the package installation after inspection is operational.
 - `policies/core-network-policy.json` — JSON policy extracted from PDF pages 10–13
 - `routing.tf` — route tables, associations, per-AZ GWLB endpoints, and routes
 - `iam.tf` — workload SSM role and instance profile
+- `zpa_dns.tf` — optional Route 53 outbound endpoints, ZPA forwarding rules, and SYSTEM exceptions
+- `tests/zpa_dns.tftest.hcl` — mocked DNS integration and input-validation tests
 - `tests/cloud_wan.tftest.hcl` — mocked integration tests (Terraform 1.7+ required)
 - `variables.tf` — input variables
 - `locals.tf` — derived values and subnet/VPC naming logic
@@ -226,7 +365,13 @@ multiregion_deployment = false
 naming_prefix = "dglading-cloud-wan-"
 vpc_endpoint_service_name = "com.amazonaws"
 region_suffix = "1"
+
+# Optional Route 53 Resolver forwarding for ZPA; empty disables it.
+zpa_dns = {}
 ```
+
+See [Optional ZPA DNS forwarding](#optional-zpa-dns-forwarding) for the populated
+map examples, VPC scope, target IPs, cloud settings, and deployment steps.
 
 ## Quickstart
 

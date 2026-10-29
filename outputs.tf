@@ -74,3 +74,23 @@ output "inspection_pending_regions" {
   description = "Regions missing a Zscaler endpoint service name. Transit and Internet egress will not work there until inspection is configured and healthy."
   value       = [for region in local.deployment_regions : region if !contains(keys(var.ztgw_endpoint_service_names), region)]
 }
+
+output "zpa_dns_resolvers" {
+  description = "ZPA outbound Resolver endpoint and rule IDs, keyed by managed workload VPC."
+  value = merge(
+    { for key, endpoint in aws_route53_resolver_endpoint.zpa_use1 : key => {
+      endpoint_id      = endpoint.id
+      vpc_id           = aws_vpc.use1[key].id
+      endpoint_ips     = [for address in endpoint.ip_address : address.ip]
+      forward_rule_ids = { for rule_key, rule in aws_route53_resolver_rule.zpa_forward_use1 : local.zpa_dns_forward_use1[rule_key].domain => rule.id if local.zpa_dns_forward_use1[rule_key].vpc_key == key }
+      system_rule_ids  = { for rule_key, rule in aws_route53_resolver_rule.zpa_system_use1 : local.zpa_dns_system_use1[rule_key].domain => rule.id if local.zpa_dns_system_use1[rule_key].vpc_key == key }
+    } },
+    { for key, endpoint in aws_route53_resolver_endpoint.zpa_use2 : key => {
+      endpoint_id      = endpoint.id
+      vpc_id           = aws_vpc.use2[key].id
+      endpoint_ips     = [for address in endpoint.ip_address : address.ip]
+      forward_rule_ids = { for rule_key, rule in aws_route53_resolver_rule.zpa_forward_use2 : local.zpa_dns_forward_use2[rule_key].domain => rule.id if local.zpa_dns_forward_use2[rule_key].vpc_key == key }
+      system_rule_ids  = { for rule_key, rule in aws_route53_resolver_rule.zpa_system_use2 : local.zpa_dns_system_use2[rule_key].domain => rule.id if local.zpa_dns_system_use2[rule_key].vpc_key == key }
+    } }
+  )
+}

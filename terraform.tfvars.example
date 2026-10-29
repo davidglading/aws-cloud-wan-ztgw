@@ -31,3 +31,18 @@ ztgw_endpoint_service_names = {}
 #   "us-east-1" = "com.amazonaws.vpce.us-east-1.vpce-svc-nnnnnnnnnnnnnnnnn"
 #   "us-east-2" = "com.amazonaws.vpce.us-east-2.vpce-svc-nnnnnnnnnnnnnnnnn"
 # }
+
+# Optional ZPA DNS forwarding, keyed by an active <region>-prod or <region>-dev
+# VPC. VPC IDs and both workload subnet IDs are derived automatically.
+# Empty means no Route 53 Resolver resources or endpoint charges.
+zpa_dns = {}
+# zpa_dns = {
+#   "us-west-1-prod" = {
+#     application_domain_names = ["apps.example.internal", "private.example.com"]
+#     target_ips               = ["185.46.212.88", "185.46.212.89"]
+#     target_port              = 53
+#     zscaler_cloud_name       = "zscaler.net"
+#     zpa_cloud_name           = "ZPA" # or ZPA-Beta
+#     additional_system_domains = []
+#   }
+# }

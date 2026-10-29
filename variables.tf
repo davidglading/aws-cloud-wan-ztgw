@@ -80,3 +80,65 @@ variable "ztgw_endpoint_service_names" {
     error_message = "Each entry must map an AWS region to its matching Zscaler GWLB service name: com.amazonaws.vpce.<region>.vpce-svc-<id>."
   }
 }
+
+variable "zpa_dns" {
+  description = "Optional Route 53 Resolver configuration keyed by managed workload VPC key (<region>-prod or <region>-dev). An empty map creates no DNS resources. VPC IDs and two workload subnet IDs are derived from the selected VPC."
+  type = map(object({
+    application_domain_names  = set(string)
+    target_ips                = optional(set(string), ["185.46.212.88", "185.46.212.89"])
+    target_port               = optional(number, 53)
+    zscaler_cloud_name        = optional(string, "zscaler.net")
+    zpa_cloud_name            = optional(string, "ZPA")
+    additional_system_domains = optional(set(string), [])
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for key in keys(var.zpa_dns) : can(regex("^[a-z]{2}(-[a-z]+)+-[0-9]+-(prod|dev)$", key))
+    ])
+    error_message = "Each zpa_dns key must identify a managed workload VPC: <region>-prod or <region>-dev."
+  }
+
+  validation {
+    condition = alltrue([
+      for config in values(var.zpa_dns) :
+      length(config.application_domain_names) > 0 && length(join(",", config.application_domain_names)) <= 4096 &&
+      alltrue([for domain in config.application_domain_names :
+        trimspace(domain) == "." || (
+          length(trimspace(domain)) <= 254 &&
+          can(regex("^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$", trimspace(domain)))
+        )
+      ])
+    ])
+    error_message = "Supply one or more application DNS suffixes (up to 4096 characters total). Use example.internal rather than *.example.internal, or . to forward all domains except SYSTEM exceptions."
+  }
+
+  validation {
+    condition = alltrue([
+      for config in values(var.zpa_dns) :
+      length(config.target_ips) >= 1 && length(config.target_ips) <= 6 &&
+      alltrue([for ip in config.target_ips : can(cidrnetmask("${ip}/32"))]) &&
+      config.target_port >= 1 && config.target_port <= 65535 && floor(config.target_port) == config.target_port
+    ])
+    error_message = "Provide 1–6 IPv4 DNS target addresses and an integer target_port from 1 to 65535."
+  }
+
+  validation {
+    condition = alltrue([
+      for config in values(var.zpa_dns) : contains(["ZPA", "ZPA-Beta"], config.zpa_cloud_name)
+    ])
+    error_message = "zpa_cloud_name must be ZPA (prod.zpath.net) or ZPA-Beta (zpabeta.net)."
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for config in values(var.zpa_dns) : [
+        for domain in setunion(config.additional_system_domains, config.zscaler_cloud_name == "" ? toset([]) : toset([config.zscaler_cloud_name])) :
+        length(trimspace(domain)) <= 254 &&
+        can(regex("^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*\\.?$", trimspace(domain)))
+      ]
+    ]))
+    error_message = "zscaler_cloud_name and additional_system_domains must be DNS domain names without wildcards. An empty zscaler_cloud_name omits that one exception."
+  }
+}
